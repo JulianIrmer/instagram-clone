@@ -1,0 +1,13 @@
+@import './variables.scss';
+@import 'node_modules/bootstrap/scss/bootstrap.scss';
+@import 'node_modules/bootstrap-vue/src/index.scss';
+
+body {
+    display: flex;
+    justify-content: center;
+}
+
+#app {
+    max-width: $max-doc-width;
+    
+}
