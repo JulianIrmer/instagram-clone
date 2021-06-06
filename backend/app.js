@@ -7,29 +7,23 @@ const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
 const session = require('express-session');
+require('dotenv').config();
 
 const PORT = process.env.PORT || 3001;
 const accessLogStream = fs.createWriteStream(path.join(__dirname, 'access.log'), { flags: 'a' });
 
 const app = express();
+
+// Middleware
 app.use(cors());
 app.use(helmet());
 app.use(bodyParser.json());
 app.use(morgan('tiny', {stream: accessLogStream}));
-
-app.use(session({
-    secret: 'somerandonstuffs',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        maxAge: 600000
-    }
-}));
-
-const DB_URL = 'mongodb+srv://admin:lala1234@cluster0.7x4ea.mongodb.net/instagram-clone?retryWrites=true&w=majority';
+app.use(session({secret: 'ssshhhhh', saveUninitialized: true, resave: true}));
 
 // DB conntection
-// @TODO credentials to .env
+const DB_URL = process.env.DB_URL;
+
 const mongo_options = {
   useNewUrlParser: true, 
   useUnifiedTopology: true,

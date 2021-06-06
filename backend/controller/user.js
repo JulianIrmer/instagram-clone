@@ -7,7 +7,8 @@ const {
         getEmailAvailability,
         hashPasswordAsync, 
         getLatestIndex,
-        getUserUpdateQuery
+        getUserUpdateQuery,
+        hasUserAlreadySubcribed
     } = require('../heplers/userHelper');
 
 router.get('/login', (req, res) => {
@@ -23,9 +24,14 @@ router.get('/login', (req, res) => {
 
 router.post('/login', async (req, res) => {
     try {
-        const username = req.body.username + '';
-        const password = req.body.password + '';
+        const username = req.body.username;
+        const password = req.body.password;
+
         const user = await UserSchema.findOne({username: username});
+        if (!user) {
+            res.json({error: 'No User found'});
+            return;
+        }
         const passwordObject = await hashPasswordAsync(password, user.salt);
     
         if (!user.isLoggedIn) {
@@ -37,12 +43,13 @@ router.post('/login', async (req, res) => {
                     res.json({success: false, message: 'Password wrong.'});
                 } else {
                     user.isLoggedIn = true;
+                    req.session.username = username;
                     user.save();
-                    req.session.email = user.email;
-                    res.redirect('/home');
+                    res.json({success: true, location: 'home'});
                 }
             });
         } else {
+            req.session.username = username;
             res.json({success: true});
         }
     } catch (error) {
@@ -64,19 +71,22 @@ router.post('/register', async (req, res) => {
             const user = new UserSchema(body);
             user.isLoggedIn = true;
             user.uid = await getLatestIndex();
-            req.session.email = user.email;
+            req.session.username = user.username;
             
             const passwordObject = await hashPasswordAsync(user.password, null);
             const pwSchema = new PasswordSchema({uid: user._id, password: passwordObject.password});
             pwSchema.save();
             user.password = pwSchema._id; 
             user.salt = passwordObject.salt;
+            user.subscriptions = [];
+            user.subscribers = [];
+            user.posts = [];
         
             user.save((err) => {
                 if (err) {
                     res.json({success: false, message: err});
                 } else {
-                    res.redirect('/home');
+                    res.json({success: true, location: 'home'})
                 }
               });
         } else {
@@ -101,7 +111,7 @@ router.post('/logout', (req, res) => {
                 res.json({success: false, message: err});
             } else {
                 res.session.destroy();
-                res.redirect('/home');
+                res.json({success: true, location: 'login'});
             }
         });
     } catch (error) {
@@ -164,6 +174,43 @@ router.post('/update', async (req, res) => {
     } catch (error) {
         throw error;
     }
+});
+
+router.get('/find/user', async (req, res) => {
+
+});
+
+router.post('/subscribe', async (req, res) => {
+    const {username} = req.body;
+    const currentUsername = req.session.username;
+    const currentUser = await UserSchema.findOne({username: currentUsername}, (err) => {
+        if (err) res.json({success: false, error: err});
+    });
+    const user = await UserSchema.findOne({username: username}, (err) => {
+        if (err) res.json({success: false, error: err});
+    });
+
+    const hasSubcribedObject = hasUserAlreadySubcribed(currentUser, user);
+    const resultObject = {
+        success: true,
+        action: 'removed'
+    };
+
+    if (hasSubcribedObject.hasSubscribed) {
+        const indexUser = hasSubcribedObject.indexUser;
+        const indexTarget = hasSubcribedObject.indexTarget;
+        currentUser.subscriptions.splice(indexUser, 1);
+        user.subscribers.splice(indexTarget, 1);
+    } else {
+        currentUser.subscriptions.push(user._id);
+        user.subscribers.push(currentUser._id);
+        resultObject.action = 'added';
+    }
+    currentUser.markModified('subscriptions');
+    user.markModified('subscribers');
+    currentUser.save();
+    user.save();
+    res.json(resultObject);
 });
 
 module.exports = router;

@@ -35,6 +35,28 @@ module.exports.isInLikeArray = (postID, likes) => {
     }
 };
 
+module.exports.hasUserAlreadySubcribed = (currentUser, user) => {
+    try {
+        const result = {
+            indexUser: null,
+            indexTarget: null,
+            hasSubscribed: false
+        };
+
+        if (currentUser.subscriptions.length < 1) return result;
+
+        if (currentUser.subscriptions.includes(user._id)) {
+            result.indexUser = currentUser.subscriptions.indexOf(user._id);
+            result.indexTarget = user.subscriptions.indexOf(currentUser._id);
+            result.hasSubscribed = true;
+        }
+
+        return result;
+    } catch (error) {
+        throw error;
+    }
+};
+
 module.exports.getUsernameAvailability = async (username) => {
     try {
         const users = await UserSchema.find({username: username});

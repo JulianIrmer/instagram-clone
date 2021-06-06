@@ -7,7 +7,11 @@ const UserSchema = new Schema({
     password: {type: String, required: true, unique: false},
     isLoggedIn: {type: Boolean, required: true, unique: false},
     salt: {type: String, required: false},
-    likes: {type: Array}
+    likes: {type: Array},
+    posts: {type: Array},
+    subscriptions: {type: Array},
+    subscribers: {type: Array},
+    isLoggedIn: {type: Boolean}
 }, {collection: 'users'});
 
 module.exports = model('User', UserSchema);

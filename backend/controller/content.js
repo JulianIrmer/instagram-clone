@@ -4,7 +4,6 @@ const multer = require('multer');
 const PostSchema = require('../schemas/postSchema');
 const UserSchema = require('../schemas/userSchema');
 const CommentSchema = require('../schemas/commentSchema');
-const uuid = require('uuid');
 const path = require('path');
 const { hasUserAlreadyLiked } = require('../heplers/contentHelper');
 const { isInLikeArray } = require('../heplers/userHelper');
@@ -16,7 +15,7 @@ const upload = multer({
         // fileSize: 1000000,
     },
     filename: (req, file, cb) => {
-        cb(null, file.originalname);
+        cb(null, file.originalname + file.mimetype);
     },
     fileFilter(req, file, cb) {
         if (!file.originalname.match(/\.(png|jpg|jpeg)$/)){
@@ -32,38 +31,55 @@ router.get('/posts/get', async (req, res) => {
     res.json({images});
 });
 
-router.post('/posts/add', upload.single('image'), async (req, res) => {
+router.post('/posts/add', upload.single('image'), async (req, res, next) => {
     try {
+        if (!req.session.username) {
+            res.json({succes: false, error: "Not Authorized"});
+            next();
+            return;
+        }
+        const username = req.session.username || 'new user';
+        const user = await UserSchema.findOne({username: username});
+        const imagePath = path.join(__dirname, `../uploads/images/${req.file.filename}`);
+
         const data = {
-            path: path.join(__dirname, `../uploads/images/${req.file.filename}`), 
+            path: imagePath, 
             id: req.file.filename,
             likes: [],
-            comments: []
-        }
+            comments: [],
+            author: req.session.username || user._id,
+            date: new Date()
+        };
+
         const post = new PostSchema(data);
 
-        post.save((err, doc) => { 
+        post.save((err) => { 
             if (err) {
                 res.json({success: false, error: err});
-            } else {
-                res.json({success: true});
             }
         });
+
+        user.posts.push(post._id);
+        user.markModified('posts');
+        user.save();
+        res.json({success: true});
     } catch (err) {
+        res.json({success: false, error: err});
         throw err;
     }
 });
 
-router.post('/posts/like', async (req, res) => {
-    const {id} = req.body;
+router.get('/posts/like', async (req, res) => {
+    const {id} = req.query;
     const post = await PostSchema.findOne({id: id});
-    const username = req.session.username || 'holly';
+    const username = req.session.username;
     const user = await UserSchema.findOne({username: username});
     if (!user) {
         res.redirect('/home');
     }
     const hasUserAlreadyLikedResult = hasUserAlreadyLiked(user._id, post.likes);
     const isInUsersLikes = isInLikeArray(post._id, user.likes);
+    let action = 'add';
 
     if (hasUserAlreadyLikedResult.hasLiked) {
         post.likes.splice(hasUserAlreadyLikedResult.index, 1);
@@ -73,6 +89,7 @@ router.post('/posts/like', async (req, res) => {
 
     if (isInUsersLikes.hasLiked) {
         user.likes.splice(isInUsersLikes.index, 1);
+        action = 'remove';
     } else {
         user.likes.push(post._id);
     }
@@ -90,7 +107,7 @@ router.post('/posts/like', async (req, res) => {
             console.log(err);
         }
     });
-    res.json({success: true});
+    res.json({success: true, data: post.likes.length, action: action});
 });
 
 router.post('/posts/delete', async (req, res) => {
@@ -105,8 +122,9 @@ router.post('/posts/delete', async (req, res) => {
 
 router.post('/comment/add', async (req, res) => {
     const post = await PostSchema.findOne({id: req.body.id});
-    const user = await UserSchema.findOne({username: req.session.username});
-    const comment = new CommentSchema({content: req.body.content, user: user._id, id: uuid.v3()});
+    const username = req.session.username;
+    const user = await UserSchema.findOne({username: username});
+    const comment = new CommentSchema({content: req.body.content, user: user._id});
     comment.save();
     post.comments.push(comment._id);
     post.markModified('comments');
